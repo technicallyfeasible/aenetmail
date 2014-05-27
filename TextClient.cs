@@ -17,6 +17,8 @@ namespace AE.Net.Mail {
 
 		public event EventHandler<WarningEventArgs> Warning;
 
+		public int ServerTimeout { get; set; }
+
 		protected virtual void RaiseWarning(MailMessage mailMessage, string message) {
 			var warning = Warning;
 			if (warning != null) {
@@ -26,6 +28,7 @@ namespace AE.Net.Mail {
 
 		public TextClient() {
 			Encoding = System.Text.Encoding.GetEncoding(1252);
+			ServerTimeout = 10000;
 		}
 
 		internal abstract void OnLogin(string username, string password);
@@ -105,9 +108,9 @@ namespace AE.Net.Mail {
 			return GetResponse();
 		}
 
-		protected virtual string GetResponse(int Timeout = 10000) {
+		protected virtual string GetResponse(int timeout = 0) {
 			int max = 0;
-			return _Stream.ReadLine(ref max, Encoding, null, Timeout);
+			return _Stream.ReadLine(ref max, Encoding, null, (timeout == 0 ? ServerTimeout : timeout));
 		}
 
 		protected virtual void SendCommandCheckOK(string command) {
