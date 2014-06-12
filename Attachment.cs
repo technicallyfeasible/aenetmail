@@ -2,7 +2,7 @@ using System;
 
 namespace AE.Net.Mail {
 	public class Attachment : ObjectWHeaders {
-		public Attachment() { }
+	public Attachment() { }
 		public Attachment(byte[] data, string contentType, string name = null, bool isAttachment = false)
 			: this(contentType, name, isAttachment) {
 			SetBody(data);
@@ -34,6 +34,7 @@ namespace AE.Net.Mail {
 			get { return _ContentDisposition ?? (_ContentDisposition = Headers["Content-Disposition"].Value.ToLower()); }
 		}
 
+		public virtual int Size { get; internal set; }
 		public virtual bool OnServer { get; internal set; }
 
 		internal bool IsAttachment {

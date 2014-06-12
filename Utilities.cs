@@ -60,6 +60,99 @@ namespace AE.Net.Mail {
 			return values;
 		}
 
+		public static List<Object> ParseNested(String data)
+		{
+			List<Object> values = new List<Object>();
+			if (String.IsNullOrEmpty(data))
+				return values;
+
+			Boolean inString = false;
+			Boolean mod = false;
+			var temp = new StringBuilder();
+			Stack<List<Object>> nesting = new Stack<List<Object>>();
+			List<Object> cur = values;
+			List<Object> list = null;
+			foreach (var c in data)
+			{
+				if (c == '\\' && inString && !mod)
+					mod = true;
+				else if (mod)
+				{
+					temp.Append(c);
+					mod = false;
+				}
+				else if (c == '\"')
+				{
+					inString = !inString;
+					temp.Append(c);
+				}
+				else if (inString)
+					temp.Append(c);
+				else if (c == ' ')
+				{
+					if (list == null)
+					{
+						if (temp.Length > 0)
+							cur.Add(ParseValue(temp.ToString()));
+						temp.Clear();
+					}
+					else
+					{
+						cur.Add(list);
+						list = null;
+					}
+				}
+				else if (c == '(')
+				{
+					if (list == null)
+						list = new List<Object>();
+					nesting.Push(cur);
+					nesting.Push(list);
+					cur = new List<Object>();
+					list.Add(cur);
+					list = null;
+				}
+				else if (c == ')')
+				{
+					if (list == null)
+					{
+						if (temp.Length > 0)
+							cur.Add(ParseValue(temp.ToString()));
+						temp.Clear();
+					}
+					else
+						cur.Add(list);
+					list = nesting.Pop();
+					cur = nesting.Pop();
+				}
+				else
+					temp.Append(c);
+			}
+
+			if (list == null)
+			{
+				if (temp.Length > 0)
+					cur.Add(ParseValue(temp.ToString()));
+				temp.Clear();
+			}
+			else
+				cur.Add(list);
+
+			return values;
+		}
+
+		public static Object ParseValue(String value)
+		{
+			if (value == "NIL")
+				return null;
+			if (value.StartsWith("\""))
+				return value.Substring(1, value.Length - 2);
+			Int64 number;
+			if (Int64.TryParse(value, out number))
+				return number;
+			return value;
+		}
+
 		internal static byte[] Read(this Stream stream, int len) {
 			var data = new byte[len];
 			int read, pos = 0;

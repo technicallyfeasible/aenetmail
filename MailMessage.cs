@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using System.Collections.Specialized;
 using System.IO;
 using System.Linq;
 using System.Net.Mail;
@@ -104,9 +105,11 @@ namespace AE.Net.Mail {
 			}
 			RawHeaders = headers.ToString();
 
-			if (!headersOnly) {
+			if (!headersOnly)
+			{
 				string boundary = Headers.GetBoundary();
-				if (!string.IsNullOrEmpty(boundary)) {
+				if (!string.IsNullOrEmpty(boundary))
+				{
 					var atts = new List<Attachment>();
 					var body = ParseMime(reader, boundary, ref maxLength, atts, Encoding, termChar);
 					if (!string.IsNullOrEmpty(body))
@@ -117,7 +120,9 @@ namespace AE.Net.Mail {
 
 					if (maxLength > 0)
 						reader.ReadToEnd(maxLength, Encoding);
-				} else {
+				}
+				else
+				{
 					//	sometimes when email doesn't have a body, we get here with maxLength == 0 and we shouldn't read any further
 					string body = String.Empty;
 					if (maxLength > 0)
@@ -149,6 +154,84 @@ namespace AE.Net.Mail {
 
 			Importance = Headers.GetEnum<MailPriority>("Importance");
 			Subject = Headers["Subject"].RawValue;
+		}
+
+		private void RecurseBodyStructure(List<Object> parts, List<Attachment> attachments, Encoding encoding, Boolean isAttachment = false)
+		{
+			// have to be at least 2 parts, mime type and sub type
+			if (parts == null || parts.Count < 2)
+				return;
+
+			String subType = (parts[1] as String);
+			if (String.IsNullOrEmpty(subType))
+				throw new ImapClientException("Error in body structure: expected mime type");
+
+			// if there are sub parts then go through all of them first
+			List<Object> subParts = parts[0] as List<Object>;
+			if (subParts != null)
+			{
+				// alternative contains alternative versions of the mail?
+				Boolean isAtt = !String.Equals(subType, "alternative", StringComparison.InvariantCultureIgnoreCase);
+				// subparts are always lists
+				foreach (Object subPart in subParts)
+				{
+					if (!(subPart is List<Object>)) continue;
+					RecurseBodyStructure(subPart as List<Object>, attachments, encoding, isAtt);
+				}
+			}
+			else
+			{
+				// this is the lowest level so we can create the attachment
+				String charset = null;
+				String name = null;
+				List<Object> parameters = (parts[2] as List<Object>);
+				if (parameters != null)
+				{
+					// if there is a list then there is always at least one sub object so this should be safe
+					parameters = (parameters[0] as List<Object>);
+					for (Int32 i = 0; i < parameters.Count - 1; i += 2)
+					{
+						String p = parameters[i] as String;
+						if (String.IsNullOrEmpty(p))
+							continue;
+						String v = parameters[i + 1] as String;
+						if (String.Equals(p, "charset", StringComparison.InvariantCultureIgnoreCase))
+							charset = v;
+						else if (String.Equals(p, "name", StringComparison.InvariantCultureIgnoreCase))
+							name = v;
+					}
+				}
+
+				String contentType = String.Format("{0}/{1}", parts[0], parts[1]).ToLower();
+				Attachment attachment = new Attachment("", contentType, name, isAttachment);
+				attachment.Encoding = Utilities.ParseCharsetToEncoding(charset, encoding);
+				if (parts[5] is String)
+					attachment.ContentTransferEncoding = parts[5] as String;
+				Int64 size = (Int64) parts[6];
+				attachment.Size = (Int32) size;
+				attachments.Add(attachment);
+			}
+		}
+
+		/// <summary>
+		/// Load the email structure from IMAP BODYSTRUCTURE information
+		/// </summary>
+		/// <param name="bodyStructure"></param>
+		/// <param name="encoding"></param>
+		public virtual void LoadStructure(String bodyStructure, Encoding encoding)
+		{
+			if (String.IsNullOrEmpty(bodyStructure))
+				return;
+
+			List<Attachment> atts = new List<Attachment>();
+
+			// parse the parenthesis delimited list
+			List<Object> parts = Utilities.ParseNested(bodyStructure);
+			RecurseBodyStructure(parts, atts, encoding);
+
+			// add attachments to correct locations
+			foreach (var att in atts)
+				(att.IsAttachment ? Attachments : AlternateViews).Add(att);
 		}
 
 		private static string ParseMime(Stream reader, string boundary, ref int maxLength, ICollection<Attachment> attachments, Encoding encoding, char? termChar) {
@@ -198,6 +281,7 @@ namespace AE.Net.Mail {
 						data = reader.ReadLine(ref maxLength, a.Encoding, termChar);
 					}
 					a.SetBody(nestedBody.ToString());
+					a.Size = nestedBody.Length;
 					attachments.Add(a);
 				}
 			}

@@ -422,8 +422,9 @@ namespace AE.Net.Mail {
 					mail.SetFlags(imapHeaders["Flags"]);
 
 				mail.Load(_Stream, headersonly, mail.Size);
+				mail.LoadStructure(imapHeaders["BODYSTRUCTURE"], Encoding);
 
-				foreach (var key in imapHeaders.AllKeys.Except(new[] { "UID", "Flags", "BODY[]", "BODY[HEADER]" }, StringComparer.OrdinalIgnoreCase))
+				foreach (var key in imapHeaders.AllKeys.Except(new[] { "UID", "Flags", "BODYSTRUCTURE", "BODY[]", "BODY[HEADER]" }, StringComparer.OrdinalIgnoreCase))
 					mail.Headers.Add(key, new HeaderValue(imapHeaders[key]));
 
 				processCallback(mail);
@@ -439,7 +440,7 @@ namespace AE.Net.Mail {
 			string tag = GetTag();
 			string command = tag + (uid ? "UID " : null)
 					+ "FETCH " + start + ":" + end + " ("
-					+ _FetchHeaders + "UID FLAGS"
+					+ _FetchHeaders + "UID FLAGS" + (headersonly && !uidsonly ? " BODYSTRUCTURE" : null)
 					+ (uidsonly ? null : (setseen ? " BODY[" : " BODY.PEEK[") + (headersonly ? "HEADER]" : "]"))
 					+ ")";
 
