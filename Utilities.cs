@@ -28,10 +28,26 @@ namespace AE.Net.Mail {
 			var values = new NameValueCollection();
 			string name = null;
 			int nump = 0;
+			bool inString = false, mod = false;
 			var temp = new StringBuilder();
 			if (data != null)
 				foreach (var c in data) {
-					if (c == ' ') {
+					if (c == '\\' && inString && !mod)
+						mod = true;
+					else if (mod)
+					{
+						temp.Append(c);
+						mod = false;
+					}
+					else if (c == '\"')
+					{
+						inString = !inString;
+						temp.Append(c);
+					}
+					else if (inString)
+						temp.Append(c);
+					else if (c == ' ')
+					{
 						if (name == null) {
 							name = temp.ToString();
 							temp.Clear();
@@ -42,15 +58,20 @@ namespace AE.Net.Mail {
 							temp.Clear();
 						} else
 							temp.Append(c);
-					} else if (c == '(') {
+					} 
+					else if (c == '(')
+					{
 						if (nump > 0)
 							temp.Append(c);
 						nump++;
-					} else if (c == ')') {
+					}
+					else if (c == ')')
+					{
 						nump--;
 						if (nump > 0)
 							temp.Append(c);
-					} else
+					}
+					else
 						temp.Append(c);
 				}
 
